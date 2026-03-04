@@ -4,21 +4,42 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/install-codex-plugin.sh <plugin-name> [--gemini-only]
+  bash scripts/install-codex-plugin.sh <plugin-name> [--profile <name>]
+
+Profiles:
+  codex53xhigh-ui-gemini (default)
+  gemini-only
+
+Shorthands:
+  --ui-gemini   => --profile codex53xhigh-ui-gemini
+  --gemini-only => --profile gemini-only
 
 Examples:
   bash scripts/install-codex-plugin.sh pumasi
-  bash scripts/install-codex-plugin.sh kkirikkiri --gemini-only
+  bash scripts/install-codex-plugin.sh kkirikkiri --ui-gemini
+  bash scripts/install-codex-plugin.sh show-me-the-prd --profile gemini-only
 EOF
 }
 
 plugin=""
-gemini_only=false
+profile="codex53xhigh-ui-gemini"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --profile)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        echo "[ERROR] --profile requires a value" >&2
+        usage
+        exit 1
+      fi
+      profile="$1"
+      ;;
+    --ui-gemini)
+      profile="codex53xhigh-ui-gemini"
+      ;;
     --gemini-only)
-      gemini_only=true
+      profile="gemini-only"
       ;;
     -h|--help)
       usage
@@ -46,10 +67,15 @@ if [[ -z "${plugin}" ]]; then
   exit 1
 fi
 
+if [[ "${profile}" != "codex53xhigh-ui-gemini" ]] && [[ "${profile}" != "gemini-only" ]]; then
+  echo "[ERROR] Unsupported profile: ${profile}" >&2
+  exit 1
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gitmodules="${repo_root}/.gitmodules"
 plugin_dir="${repo_root}/plugins/${plugin}"
-adapter_root="${repo_root}/profiles/gemini-only/command-adapters"
+adapter_root="${repo_root}/profiles/${profile}/command-adapters"
 
 if [[ ! -f "${gitmodules}" ]]; then
   echo "[ERROR] .gitmodules not found." >&2
@@ -127,11 +153,12 @@ build_generic_adapter() {
   local cmd_name="$2"
   local hint="$3"
 
-  cat > "${target}" <<EOF
+  if [[ "${profile}" == "gemini-only" ]]; then
+    cat > "${target}" <<EOF
 # Gemini Adapter (${cmd_name})
 
 ## Intent
-원본 command의 기능 목표를 Codex + Gemini-only 환경에서 안전하게 수행한다.
+원본 command의 기능 목표를 Codex + Gemini-only 환경에서 수행한다.
 
 ## Input
 - arguments: ${hint:-<none>}
@@ -139,28 +166,52 @@ build_generic_adapter() {
 ## Rules
 1. AskUserQuestion은 사용하지 않고, 필요한 경우 짧은 텍스트 질문 1개만 한다.
 2. 모호하면 추천 기본값으로 즉시 진행한다.
-3. 멀티에이전트 지시가 있으면 Codex agent 도구를 사용한다.
-4. 외부 CLI 실행이 필요하면 gemini CLI만 사용한다.
+3. 멀티에이전트 지시가 있으면 Codex agent 도구로 치환한다.
+4. 외부 CLI 실행은 gemini CLI만 사용한다.
 5. claude CLI / Claude OAuth / /plugin 명령은 요구하지 않는다.
 
 ## Output
 - 원본 command의 산출물 목적을 유지한다.
 - 대체 동작이 있으면 명확히 고지한다.
 EOF
+  else
+    cat > "${target}" <<EOF
+# Runtime Adapter (${cmd_name})
+
+## Intent
+원본 command의 기능 목표를 Codex + UI-specialized Gemini 프로필로 수행한다.
+
+## Input
+- arguments: ${hint:-<none>}
+
+## Routing Policy
+1. 기본 실행자: Codex (`codex-5.3`, reasoning `xhigh`)
+2. UI/UX/디자인 작업에만 Gemini CLI 사용
+3. 혼합 작업이면:
+   - UI 파트: Gemini
+   - 나머지 파트: Codex
+4. claude CLI / Claude OAuth / /plugin 명령은 요구하지 않는다.
+
+## UI Task Heuristics
+- 키워드 예시: `ui`, `ux`, `디자인`, `레이아웃`, `타이포`, `컬러`, `반응형`, `컴포넌트 스타일`
+
+## Output
+- 원본 command의 산출물 목적을 유지한다.
+- 어떤 실행자를 썼는지 한 줄로 명시한다.
+EOF
+  fi
 }
 
 create_command_shim() {
   local cmd_file="$1"
   local cmd_name
   local desc
-  local arg_hint
   local target
   local adapter_src
   local adapter_target
 
   cmd_name="$(basename "${cmd_file}" .md)"
   desc="$(extract_frontmatter_field "${cmd_file}" "description")"
-  arg_hint="$(extract_frontmatter_field "${cmd_file}" "argument-hint")"
 
   if [[ -z "${desc}" ]]; then
     desc="Codex shim for ${plugin}/${cmd_name}"
@@ -175,11 +226,11 @@ create_command_shim() {
   adapter_src="${adapter_root}/${plugin}/${cmd_name}.md"
   adapter_target="${target}/ADAPTER.md"
 
-  if [[ "${gemini_only}" == true ]] && [[ -f "${adapter_src}" ]]; then
+  if [[ -f "${adapter_src}" ]]; then
     cp "${adapter_src}" "${adapter_target}"
     installed_adapters=$((installed_adapters + 1))
   else
-    build_generic_adapter "${adapter_target}" "${cmd_name}" "${arg_hint}"
+    build_generic_adapter "${adapter_target}" "${cmd_name}" "$(extract_frontmatter_field "${cmd_file}" "argument-hint")"
   fi
 
   {
@@ -207,12 +258,16 @@ description: ${desc} (Codex shim)
 4. `/plugin ...` 명령은 사용하지 않는다.
 EOF
 
-    if [[ "${gemini_only}" == true ]]; then
+    if [[ "${profile}" == "gemini-only" ]]; then
       cat <<'EOF'
-5. Gemini-only 프로필:
-   - 외부 워커/리서치 요약 실행은 gemini CLI만 사용한다.
-   - claude CLI 또는 Claude OAuth를 요구하지 않는다.
-   - 외부 codex CLI 실행은 금지한다.
+5. Runtime profile = gemini-only:
+   - 외부 워커/요약/리서치는 gemini CLI만 사용한다.
+EOF
+    else
+      cat <<'EOF'
+5. Runtime profile = codex53xhigh-ui-gemini:
+   - 기본 실행자는 Codex (`codex-5.3`, reasoning `xhigh`).
+   - UI/UX/디자인 작업에만 Gemini CLI를 사용한다.
 EOF
     fi
 
@@ -248,13 +303,10 @@ echo "- skill dirs: ${installed_skills}"
 echo "- command shims: ${installed_shims}"
 echo "- profile adapters: ${installed_adapters}"
 echo "- target root: ${dest_root}"
-if [[ "${gemini_only}" == true ]]; then
-  echo "- profile: gemini-only"
-else
-  echo "- profile: default"
-fi
+echo "- profile: ${profile}"
 
 echo ""
 echo "Next steps:"
-echo "1) Run: bash scripts/audit-codex-compat.sh ${plugin}"
-echo "2) Ensure AGENTS.md routes trigger names to installed skills"
+echo "1) Run: bash scripts/check-runtime-profile.sh ${profile}"
+echo "2) Run: bash scripts/audit-codex-compat.sh ${plugin}"
+echo "3) Ensure AGENTS.md routes trigger names to installed skills"

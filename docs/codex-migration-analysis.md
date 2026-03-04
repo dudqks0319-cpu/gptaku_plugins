@@ -64,7 +64,7 @@
 | kkirikkiri | Medium | 팀 설계 논리 재사용 가능, 실행 인터페이스 보정 필요 |
 | skillers-suda | Medium | skill 자산 재사용 가능, 실행 라우팅 보정 필요 |
 
-## 4. 권장 전환 전략
+## 4. 전환 진행 상태
 
 ### Phase 1 (완료)
 
@@ -72,18 +72,31 @@
 - Codex 설치/목록/호환성 점검 스크립트 추가
 - 전환 분석 문서화
 
-### Phase 2 (추천)
+### Phase 2 (진행)
 
-- 각 플러그인별 `codex-shim` 문서/어댑터 작성
-- `AskUserQuestion` 흐름을 Codex 친화형 자동/단문 질의 흐름으로 치환
+- 원본 `commands/*.md`를 Codex command shim skill로 자동 생성
+- 플러그인 단위 설치 + 전체 일괄 설치 스크립트 제공
+- `--gemini-only` 프로필 도입 (Claude OAuth 미사용 환경 대응)
 
-### Phase 3 (추천)
+### Phase 3 (권장)
 
+- 플러그인별 세부 shim 튜닝
 - 호환성 CI 스캔 도입 (금지 패턴 검사)
 - 플러그인별 Codex readiness 배지 자동 갱신
 
-## 5. 보안 관점 메모
+## 5. Gemini-Only 프로필
 
-- 현재 전환은 문서/스크립트 레벨이며, 런타임 비밀값 하드코딩은 추가하지 않음
+Claude OAuth가 불가한 환경을 위해 `--gemini-only` 옵션을 제공한다.
+
+핵심 정책:
+- 외부 실행자는 Gemini CLI만 허용
+- Claude CLI / Claude OAuth 요구 금지
+- command shim에서 원본 흐름을 Codex+Gemini 규칙으로 치환
+
+참고: [docs/gemini-only-profile.md](docs/gemini-only-profile.md)
+
+## 6. 보안 관점 메모
+
+- 현재 전환은 문서/스크립트/skill 어댑터 레벨이며, 런타임 비밀값 하드코딩은 추가하지 않음
 - 서브모듈 기반 공급망이므로 pin(commit SHA) 유지 및 주기적 업데이트 검토 필요
-- 자동 실행 스크립트는 사용자 홈(`$CODEX_HOME`) 이하만 대상으로 동작하도록 제한
+- 자동 설치 스크립트는 사용자 홈(`$CODEX_HOME`) 이하만 대상으로 동작하도록 제한

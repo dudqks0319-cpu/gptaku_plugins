@@ -49,6 +49,7 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gitmodules="${repo_root}/.gitmodules"
 plugin_dir="${repo_root}/plugins/${plugin}"
+adapter_root="${repo_root}/profiles/gemini-only/command-adapters"
 
 if [[ ! -f "${gitmodules}" ]]; then
   echo "[ERROR] .gitmodules not found." >&2
@@ -77,6 +78,7 @@ mkdir -p "${dest_root}"
 
 installed_skills=0
 installed_shims=0
+installed_adapters=0
 
 install_skill_dirs() {
   local src_skills_dir="$1"
@@ -100,26 +102,66 @@ install_skill_dirs() {
   done < <(find "${src_skills_dir}" -mindepth 1 -maxdepth 1 -type d -print0)
 }
 
-extract_description() {
+extract_frontmatter_field() {
   local file="$1"
-  awk '
-    /^description:/ {
-      sub(/^description:[[:space:]]*/, "", $0)
-      gsub(/^"|"$/, "", $0)
-      print
-      exit
+  local field="$2"
+  awk -v key="${field}" '
+    BEGIN { in_fm = 0 }
+    /^---$/ {
+      if (in_fm == 0) { in_fm = 1; next }
+      if (in_fm == 1) { exit }
+    }
+    in_fm == 1 {
+      if ($0 ~ "^" key ":[[:space:]]*") {
+        sub("^" key ":[[:space:]]*", "", $0)
+        gsub(/^"|"$/, "", $0)
+        print
+        exit
+      }
     }
   ' "${file}"
+}
+
+build_generic_adapter() {
+  local target="$1"
+  local cmd_name="$2"
+  local hint="$3"
+
+  cat > "${target}" <<EOF
+# Gemini Adapter (${cmd_name})
+
+## Intent
+원본 command의 기능 목표를 Codex + Gemini-only 환경에서 안전하게 수행한다.
+
+## Input
+- arguments: ${hint:-<none>}
+
+## Rules
+1. AskUserQuestion은 사용하지 않고, 필요한 경우 짧은 텍스트 질문 1개만 한다.
+2. 모호하면 추천 기본값으로 즉시 진행한다.
+3. 멀티에이전트 지시가 있으면 Codex agent 도구를 사용한다.
+4. 외부 CLI 실행이 필요하면 gemini CLI만 사용한다.
+5. claude CLI / Claude OAuth / /plugin 명령은 요구하지 않는다.
+
+## Output
+- 원본 command의 산출물 목적을 유지한다.
+- 대체 동작이 있으면 명확히 고지한다.
+EOF
 }
 
 create_command_shim() {
   local cmd_file="$1"
   local cmd_name
   local desc
+  local arg_hint
   local target
+  local adapter_src
+  local adapter_target
 
   cmd_name="$(basename "${cmd_file}" .md)"
-  desc="$(extract_description "${cmd_file}")"
+  desc="$(extract_frontmatter_field "${cmd_file}" "description")"
+  arg_hint="$(extract_frontmatter_field "${cmd_file}" "argument-hint")"
+
   if [[ -z "${desc}" ]]; then
     desc="Codex shim for ${plugin}/${cmd_name}"
   fi
@@ -130,6 +172,16 @@ create_command_shim() {
 
   cp "${cmd_file}" "${target}/SOURCE_COMMAND.md"
 
+  adapter_src="${adapter_root}/${plugin}/${cmd_name}.md"
+  adapter_target="${target}/ADAPTER.md"
+
+  if [[ "${gemini_only}" == true ]] && [[ -f "${adapter_src}" ]]; then
+    cp "${adapter_src}" "${adapter_target}"
+    installed_adapters=$((installed_adapters + 1))
+  else
+    build_generic_adapter "${adapter_target}" "${cmd_name}" "${arg_hint}"
+  fi
+
   {
     cat <<EOF
 ---
@@ -139,37 +191,37 @@ description: ${desc} (Codex shim)
 
 # Codex Command Shim: /${cmd_name}
 
-이 스킬은 원본 GPTaku command를 Codex 환경에서 실행하기 위한 호환 레이어입니다.
+## Source Files
+- `SOURCE_COMMAND.md`: 원본 command 명세
+- `ADAPTER.md`: 현재 실행 프로필용 어댑터 규칙
 
-## Source
-- 원본 command 명세: `SOURCE_COMMAND.md`
-- 원본 plugin 자산: `${dest_root}/gptaku-${plugin}-*`
+## Mandatory Execution Order
+1. `SOURCE_COMMAND.md`를 읽고 기능 의도를 파악한다.
+2. `ADAPTER.md`를 읽고 실행 제약을 적용한다.
+3. 원본 command의 산출물 목적은 유지하고, 도구/API 차이는 치환한다.
 
-## Execution Rules
-1. `SOURCE_COMMAND.md`의 의도와 출력 형식을 최대한 유지한다.
-2. `AskUserQuestion` 의존 단계는 다음으로 치환한다:
-   - 꼭 필요할 때만 짧은 질문 1개를 텍스트로 묻기
-   - 안전한 경우 추천 기본값으로 자동 진행
-3. `Task`/`subagent_type` 기반 지시는 Codex agent 도구(`spawn_agent`, `send_input`, `wait`)로 치환한다.
-4. `\${CLAUDE_PLUGIN_ROOT}` 경로 참조는 현재 설치된 skill 경로 기준으로 해석한다.
-5. `/plugin ...` 명령을 요구하지 않는다.
+## Compatibility Rules
+1. `AskUserQuestion` 지시는 텍스트 질문 또는 추천 기본값 자동 선택으로 치환한다.
+2. `Task/subagent_type` 지시는 Codex agent 도구로 치환한다.
+3. `\${CLAUDE_PLUGIN_ROOT}` 경로는 현재 설치된 skill 경로 기준으로 치환한다.
+4. `/plugin ...` 명령은 사용하지 않는다.
 EOF
 
     if [[ "${gemini_only}" == true ]]; then
       cat <<'EOF'
-6. Gemini-only 프로필:
-   - 외부 실행자는 `gemini` CLI만 사용한다.
-   - `claude` CLI 또는 Claude OAuth를 요구하지 않는다.
-   - 외부 워커로 `codex` CLI를 호출하지 않는다.
+5. Gemini-only 프로필:
+   - 외부 워커/리서치 요약 실행은 gemini CLI만 사용한다.
+   - claude CLI 또는 Claude OAuth를 요구하지 않는다.
+   - 외부 codex CLI 실행은 금지한다.
 EOF
     fi
 
     cat <<'EOF'
 
 ## Output Rules
-- 사용자의 언어(한국어/영어)에 맞춘다.
+- 사용자 언어(한국어/영어)에 맞춘다.
 - 원본 기능의 핵심 산출물을 유지한다.
-- 호환성 한계가 있으면 대체 동작을 명시한다.
+- 치환/생략 사항이 있으면 간단히 명시한다.
 EOF
   } > "${target}/SKILL.md"
 
@@ -194,6 +246,7 @@ echo ""
 echo "Installed plugin: ${plugin}"
 echo "- skill dirs: ${installed_skills}"
 echo "- command shims: ${installed_shims}"
+echo "- profile adapters: ${installed_adapters}"
 echo "- target root: ${dest_root}"
 if [[ "${gemini_only}" == true ]]; then
   echo "- profile: gemini-only"

@@ -6,6 +6,7 @@
 
 - 원본 plugin의 `skills/*` 자산 설치
 - 원본 `commands/*.md`를 Codex용 command shim skill로 자동 생성
+- command별 Gemini 어댑터(8/8) 자동 포함
 - Claude OAuth/Claude CLI 의존 없이 Gemini CLI 기준으로 실행 규칙 고정 가능
 
 원본 저장소: <https://github.com/fivetaku/gptaku_plugins>
@@ -36,7 +37,7 @@ bash scripts/install-all-codex-plugins.sh --gemini-only
 
 생성되는 항목:
 - `gptaku-<plugin>-<skill>`: 원본 skill 복사본
-- `gptaku-<plugin>-command-<command>`: Codex command shim
+- `gptaku-<plugin>-command-<command>`: Codex command shim (+ ADAPTER.md)
 
 ## 단일 플러그인 설치
 
@@ -64,19 +65,23 @@ bash scripts/audit-codex-compat.sh
 bash scripts/audit-codex-compat.sh deep-research
 ```
 
-## 디렉토리
+## Gemini 실행 유틸리티
 
-- `plugins/`: 원본 플러그인 서브모듈
-- `scripts/`: Codex/Gemini 운영 스크립트
-- `docs/`: 마이그레이션/실행 프로필 문서
+```bash
+bash scripts/run-gemini-job.sh <prompt-file> [output-file]
+```
+
+## 문서
+
+- Gemini 프로필: [docs/gemini-only-profile.md](docs/gemini-only-profile.md)
+- 마이그레이션 분석: [docs/codex-migration-analysis.md](docs/codex-migration-analysis.md)
+- 어댑터 커버리지: [docs/adapter-coverage.md](docs/adapter-coverage.md)
 
 ## Gemini-Only 주의사항
 
 - 이 프로필은 Claude OAuth 불가 환경을 전제로 함
-- command shim은 원본 지시를 따르되, 외부 실행자는 Gemini CLI만 사용하도록 고정
-- 일부 원본 워크플로우(특히 `AskUserQuestion`/`Task` 중심)는 Codex 방식으로 어댑트되므로 1:1 UI 동작은 다를 수 있음
-
-세부는 [docs/gemini-only-profile.md](docs/gemini-only-profile.md) 참고.
+- 일부 원본 워크플로우(`AskUserQuestion`, `Task`)는 Codex 방식으로 어댑트되므로 1:1 UI 동작은 다를 수 있음
+- 기능 목표(산출물/흐름)는 유지하고 실행 메커니즘만 치환함
 
 ## License
 

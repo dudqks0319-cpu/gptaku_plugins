@@ -51,6 +51,15 @@ bash scripts/install-codex-plugin.sh <plugin-name> --gemini-only
 bash scripts/install-codex-plugin.sh kkirikkiri --gemini-only
 ```
 
+## 8개 샘플 자동 생성
+
+```bash
+bash scripts/generate-gemini-command-samples.sh
+```
+
+생성 경로:
+- `examples/gemini-only/*.md`
+
 ## 호환성 점검
 
 원본 플러그인의 Claude 전용 패턴 잔존 여부 확인:

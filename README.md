@@ -1,70 +1,88 @@
-# GPTaku Plugins
+# GPTaku Codex Plugins
 
-AI Native가 되고 싶은 사람들을 위한 Claude Code 플러그인 모음집.
+`fivetaku/gptaku_plugins`를 **Codex 전용 워크플로우**로 재구성한 포크입니다.
 
-AI Native란 AI를 단순히 도구로 쓰는 게 아니라, 기획부터 실행까지 AI를 자연스럽게 녹여내는 사람을 말합니다. 본인이 하는 일에 AI를 적용해 실질적인 성과를 만들려면, 결국 자기 자신이 먼저 AI Native해져야 합니다.
+원본은 Claude Code 플러그인 마켓플레이스용이지만, 이 포크는 아래에 집중합니다.
 
-하지만 그 과정은 쉽지 않습니다. 개발 경험이 없는 사람에게는 하나하나가 새로운 벽이고, AI와 협업하는 방법 자체를 배워가야 합니다. 이 플러그인들은 그 과정에서 겪는 구체적인 어려움을 하나씩 해소해주기 위해 만들어지고 있습니다.
+- Claude 전용 `/plugin ...` 설치 흐름 제거
+- Codex skill 설치/관리 스크립트 제공
+- Claude 전용 패턴(`AskUserQuestion`, `${CLAUDE_PLUGIN_ROOT}`) 호환성 분석 제공
 
-## Quick Start
+원본 저장소: <https://github.com/fivetaku/gptaku_plugins>
 
-### 1. 마켓플레이스 등록 (처음 한 번만)
+## 빠른 시작
 
-```
-/plugin marketplace add https://github.com/fivetaku/gptaku_plugins.git
-```
+1. 저장소 클론 + 서브모듈 초기화
 
-### 2. 원하는 플러그인 설치
-
-```
-/plugin install
-```
-
-설치 가능한 플러그인 목록이 나오면 원하는 걸 선택하세요.
-특정 플러그인을 바로 설치하려면 이름을 붙이면 됩니다:
-
-```
-/plugin install show-me-the-prd
+```bash
+git clone --recurse-submodules https://github.com/dudqks0319-cpu/gptaku_plugins.git
+cd gptaku_plugins
 ```
 
-> **한 번에 하나씩만 설치됩니다.** 여러 개를 설치하려면 하나씩 반복해주세요.
+2. 설치 가능한 플러그인 목록 확인
 
-### 3. 업데이트
-
-플러그인이 업데이트되면 아래 명령어로 최신 버전을 받을 수 있습니다:
-
-```
-/plugin update
+```bash
+bash scripts/list-codex-plugins.sh
 ```
 
-> 설치/업데이트 후에는 Claude Code를 **재시작**하세요.
+3. 원하는 플러그인의 skill을 Codex 홈에 설치
 
-## Available Plugins
+```bash
+bash scripts/install-codex-plugin.sh <plugin-name>
+```
 
-| Plugin | Description |
-|--------|-------------|
-| [docs-guide](https://github.com/fivetaku/docs-guide) | 공식문서 기반 정확한 답변 - 68개+ 라이브러리 지원, llms.txt 패턴 활용 |
-| [git-teacher](https://github.com/fivetaku/git-teacher) | 비개발자를 위한 Git/GitHub 온보딩 - 클라우드 비유로 5단계 완성 |
-| [vibe-sunsang](https://github.com/fivetaku/vibe-sunsang) | 바이브코더를 위한 AI 멘토 에이전트 - 대화 분석, 멘토링, 성장 리포트 |
-| [deep-research](https://github.com/fivetaku/deep-research-kit) | AI 딥리서치 - 멀티에이전트 소스 검증, 7단계 파이프라인, 구조화된 리포트 생성 |
-| [pumasi](https://github.com/fivetaku/pumasi) | 품앗이 - Claude가 PM, Codex CLI가 병렬 외주 개발자로 대규모 코딩 병렬 처리 |
-| [show-me-the-prd](https://github.com/fivetaku/show-me-the-prd) | 쇼미더피알디 - 인터뷰 기반 PRD 생성, 한 문장에서 4종 디자인 문서까지 |
-| [kkirikkiri](https://github.com/fivetaku/kkirikkiri) | 끼리끼리 - 자연어 한마디로 AI 에이전트 팀 자동 구성, 멀티 모델 지원 |
-| [skillers-suda](https://github.com/fivetaku/skillers-suda) | 스킬러들의 수다 - 4명의 전문가가 수다 떨면서 바이브코더의 아이디어를 동작하는 스킬로 변환 |
+예시:
 
-> 플러그인은 계속 추가됩니다. Watch 해두시면 새 플러그인 알림을 받을 수 있습니다.
+```bash
+bash scripts/install-codex-plugin.sh pumasi
+```
 
-## Requirements
+기본 설치 경로는 `${CODEX_HOME:-$HOME/.codex}/skills` 입니다.
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** 전용 플러그인입니다
-- Codex, Antigravity 등 다른 AI 코딩 도구는 지원하지 않습니다
-- **Windows**: WSL2 위에서 Claude Code를 실행해야 합니다 (`wsl --install`)
-- **macOS / Linux**: 바로 사용 가능
+## 호환성 점검
 
-## Contributing
+서브모듈을 받은 뒤 아래로 Claude 전용 패턴 잔존 여부를 확인할 수 있습니다.
 
-새로운 플러그인 아이디어나 개선 제안은 [Issues](https://github.com/fivetaku/gptaku_plugins/issues)에 남겨주세요.
+```bash
+bash scripts/audit-codex-compat.sh
+```
+
+특정 플러그인만 확인하려면:
+
+```bash
+bash scripts/audit-codex-compat.sh deep-research
+```
+
+## 현재 호환성 상태 (초기 분석)
+
+| Plugin | Codex 적합도 | 메모 |
+| --- | --- | --- |
+| docs-guide | Medium | skill 중심 사용 가능, 일부 Claude 경로 참조 존재 |
+| git-teacher | Low | `AskUserQuestion` 의존 흐름이 많아 추가 변환 필요 |
+| vibe-sunsang | Low | Claude 전용 인터랙션/경로 참조가 혼합됨 |
+| deep-research | Low | `AskUserQuestion`, `Task` 기반 오케스트레이션 치환 필요 |
+| pumasi | Medium | Codex 지향적이지만 경로/명령 래퍼 보정 필요 |
+| show-me-the-prd | Medium | 대화형 플로우는 재설계 필요, skill 자산은 재사용 가능 |
+| kkirikkiri | Medium | 멀티에이전트 설계는 재사용 가능, 실행 인터페이스 보정 필요 |
+| skillers-suda | Medium | skill 자산 재사용 가능, 실행 라우팅은 Codex화 필요 |
+
+세부 근거는 [docs/codex-migration-analysis.md](docs/codex-migration-analysis.md)에서 확인하세요.
+
+## 디렉토리
+
+- `plugins/`: 원본 플러그인 서브모듈
+- `scripts/`: Codex 전용 운영 스크립트
+- `docs/`: 마이그레이션 분석/전환 가이드
+
+## 기여
+
+Codex 호환성 개선 PR 환영합니다.
+
+권장 우선순위:
+1. `AskUserQuestion` 기반 플로우를 Codex 대화형/자동 결정 플로우로 변환
+2. `${CLAUDE_PLUGIN_ROOT}` 참조를 skill 상대 경로로 치환
+3. Claude 전용 command front-matter 의존 제거
 
 ## License
 
-MIT
+원본과 동일하게 MIT를 따릅니다.
